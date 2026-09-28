@@ -28,6 +28,13 @@ NAME="${NAME:-kvmem-test}"
 PORT="${PORT:-8095}"
 API_KEY="${API_KEY:-changeme}"
 
+# 本脚本是**客户端**（只压服务，不启动任何东西），所以不像 run-8095-exact.sh
+# 那样对占位密钥硬失败。但占位密钥会让请求 401，压测结果无意义 —— 明确提示。
+if [ "$API_KEY" = "changeme" ]; then
+  echo "[warn] API_KEY 未设置（或仍是占位符 changeme）—— 请求会返回 401，压测无效。" >&2
+  echo "[warn]   export API_KEY=<服务端 --api-key 设的那个值>" >&2
+fi
+
 # ---- 安全门：OOM 风险必须显式确认 ----
 if [ "${CONFIRM_OOM_RISK:-0}" != "1" ]; then
   cat >&2 <<'EOF'

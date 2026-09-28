@@ -6,7 +6,8 @@
 #   密码留空（""）则直接执行（若当前用户可读 cgroup）
 #   例: bash kvmem-mem-sample.sh "" 24 15
 #
-# 环境变量: NAME（容器名，默认 kvmem-test）、PORT（默认 8095）、API_KEY（默认 changeme）
+# 环境变量: NAME（容器名，默认 kvmem-test）、PORT（默认 8095）、
+#           API_KEY（服务端 --api-key 设的那个值）
 #
 # 输出列:
 #   anon_MiB   KV 池所在，真正要盯的（顶到击杀线就 OOM）
@@ -22,6 +23,15 @@ IV="${3:-15}"
 NAME="${NAME:-kvmem-test}"
 PORT="${PORT:-8095}"
 API_KEY="${API_KEY:-changeme}"
+
+# 本脚本是**客户端**（只查询服务，不启动任何东西），所以不像 run-8095-exact.sh
+# 那样对占位密钥硬失败。但用占位密钥只会拿到 401，采样表里 n_prompt/n_decoded
+# 会全是 "-" —— 这里明确提示，避免"表出来了但不知道数据为什么是空的"。
+if [ "$API_KEY" = "changeme" ]; then
+  echo "[warn] API_KEY 未设置（或仍是占位符 changeme）—— /slots 会返回 401，" >&2
+  echo "[warn] n_prompt / n_decoded 两列会显示 '-'。正确用法：" >&2
+  echo "[warn]   export API_KEY=<服务端 --api-key 设的那个值>" >&2
+fi
 
 if [ -n "$PW" ]; then
   SUDO() { printf '%s\n' "$PW" | sudo -S -p '' "$@"; }
