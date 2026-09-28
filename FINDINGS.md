@@ -9,7 +9,7 @@
 > 完整的数据表与推理过程都在这里。
 > 保留独立文件，是为了给其它文档（`docs/tutorial.md`、`scripts/gguf_kv_math.py`）
 > 提供**稳定的编号**（A5 / A6 / A7 …）供交叉引用。
-> 想看 KVMem 原理、实测数据、故障速查表，请读 [README.md](README.md)。
+> 想看 KVMem 原理与实测数据，请读 [README.md](README.md)。
 
 ---
 

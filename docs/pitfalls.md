@@ -364,3 +364,29 @@ select_budget = 131072   // --kvmem-budget (semantic window tokens)
 - [ ] `system.slice/memory.events` 的 `oom_kill` 是否增加
 - [ ] swap 是否持续增长
 - [ ] 长会话下的累积斜率是否失控
+
+---
+
+## 七、故障速查表（症状 → 最可能原因 → 处理）
+
+| 症状 | 最可能的原因 | 处理 |
+|---|---|---|
+| 客户端随机 502，服务日志**无报错** | **宿主 OOM 击杀**（静默 SIGKILL） | 查 `system.slice/memory.events`（**别查叶子 cgroup**）；按 [`FINDINGS.md`](../FINDINGS.md) 的 A7 顺序处置 |
+| 服务无报错却"消失"、随后自动重启 | 同上（外部信号） | 静默 = 外部信号；查 `dmesg \| grep -i "killed process"` |
+| 重启 1 次就掉线 1 次，`latency_ms`≈5000 | 容器重启空窗 8–13 s > 代理超时 5 s | 给容器加 `--memory` 上限，让 OOM 只杀容器；或调大代理超时 |
+| 启动即失败，报 `invalid ggml type NNN` | 模型是 fork 私有格式（如 PQ2_0 = type 142） | 换对应的 fork 二进制 |
+| prefill 只有几十 t/s | **FA 弃权退回 CPU** | 查 `GGML_CUDA_FA_ALL_QUANTS` + K/V 同类型；量 prefill 验收 |
+| 改完 KV 精度后**速度暴跌** | 同上，FA 静默弃权（无任何 warning） | 换回原精度，先修编译/参数前提 |
+| 端到端耗时比进度行算出来的长几十秒 | prefill 末尾「隐形时间」 | 用 `prompt eval time`，别用进度行 t/s 反推 |
+| 内存"改了参数却降不下来" | KV 池是**高水位**语义，或只是重启清池 | 重启清池最直接；要真降成本就换 `--kv-dtype` |
+| 降了 `-c` 但内存没降 | **`-c` 不是内存杠杆** | 别动 `-c`；换 `--kv-dtype` 或重启 |
+| 以为 `--kvmem-budget` 是显存 MiB | 语义是**有效窗口 token 数** | 回源码/`--help` 确认；模型实际只看得到这么多 |
+| `/health` 一直 503 | 模型还在加载（大模型 8–10 s 正常） | 等；`docker logs` 看进度 |
+| 改完参数没生效 | 只改了脚本文件，**容器没重建** | `docker inspect` 确认实际 Cmd |
+| 首请求卡 80–90 s | 无 warmup + 无 prompt cache，重建 KV | 正常现象；调大客户端超时 |
+| 容器能起但外部连不上 | `--host` 不是 `0.0.0.0` | 改 `--host 0.0.0.0`（但宿主侧仍建议绑 `127.0.0.1`） |
+| 请求返回 401 | `/v1/*` 需要 key | 加 `Authorization: Bearer <key>` |
+| 压测时其它客户端全部失败 | `-np 1`，**服务独占** | 压测前确认 `is_processing=false` |
+| `curl` 连不上本机服务 | 本地代理污染 | 加 `--noproxy '*'` |
+| 时间线怎么也对不上 | 日志行首是**已运行时长**，不是墙上时钟 | 用 `docker logs --timestamps` |
+| 显存够但速度掉层 | `--fit` 丢层，server 日志看不见 | `nvidia-smi` 占用 + 实测 t/s 反推 |
