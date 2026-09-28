@@ -309,7 +309,10 @@ cp -a start-8095.sh "start-8095.sh.bak-$(date +%Y%m%d-%H%M%S)"
 
 ### 还没做的可选下一步
 
+- `--kvmem-gen-reserve`：本机设的 **16384 是默认值 256 的 64 倍**，占掉 GPU KV 池的一大块；
+  若单轮生成不需要那么长，降下来可以换更大的有效窗口。
 - `--spec-kv-dtype`：MTP draft 的 KV（**默认 f16**）可再降一点；
   不影响最终输出质量（draft token 会被主模型校验）。
 - 给容器加 **`--memory` 上限**：让 OOM 只杀容器、不再**连带杀死宿主机其它服务**。
 - **挂看门脚本**：`RestartCount` 增加时自动记录 `free` / `oom_kill` / 日志尾部。
+- `--kvmem-cpu-gb`：显式给 CPU 溢出区设上限（⚠️ 语义未验证，见 [07 篇 §2.5](07-parameters.md)）。

@@ -1,0 +1,76 @@
+# KVMem 服务 —— docker compose 部署配置
+#
+# 相比一长串 `docker run`，compose 把参数集中在 environment/command 段，
+# 改参数只需 `docker compose up -d`。
+#
+# 用法:
+#   cd deploy
+#   cp .env.example .env      # 然后按需修改
+#   docker compose up -d
+#
+# 查看生效参数:
+#   docker inspect kvmem-test --format '{{json .Config.Cmd}}'
+#
+# ⚠️ 本配置按 `docker inspect` 反推自实际运行的容器，与某些仓库里的
+#    start-*.sh（「带 Web UI」的变体）不同 —— 后者多出 --ui-dir / --shm-size /
+#    -e LD_LIBRARY_PATH / -w，且缺少 --api-key。
+
+services:
+  kvmem:
+    image: nvidia/cuda:12.8.1-devel-ubuntu24.04
+    container_name: ${CONTAINER_NAME:-kvmem-test}
+    restart: unless-stopped
+
+    # 新版 compose 用 gpus；旧版可改成：
+    #   deploy:
+    #     resources:
+    #       reservations:
+    #         devices:
+    #           - driver: nvidia
+    #             count: all
+    #             capabilities: [gpu]
+    gpus: all
+
+    ports:
+      - "${HOST_PORT:-8095}:8080"
+
+    volumes:
+      # fork 源码目录（容器内 /src，二进制在 /src/build/bin/llama-kvmem-server）
+      - "${KVREPO:-/home/user/kvmem-llama.cpp}:/src"
+      # 模型：只读挂载，容器内固定为 /models/model.gguf
+      - "${MODEL:-/llama/models/model.gguf}:/models/model.gguf:ro"
+
+    command: >
+      /src/build/bin/llama-kvmem-server -m /models/model.gguf
+      --host 0.0.0.0 --port 8080
+      -c ${CTX:-131072}
+      -n ${N_PREDICT:-16384}
+      --kvmem-budget ${BUDGET:-24576}
+      --kvmem-gen-reserve ${GEN_RESERVE:-16384}
+      --kv-dtype ${KV_DTYPE:-q5_0}
+      --spec-type ${SPEC_TYPE:-draft-mtp}
+      --spec-draft-n-max ${DRAFT_N_MAX:-2}
+      --kvmem-mtp-state ${MTP_STATE:-replay}
+      --api-key ${API_KEY:?API_KEY is required (copy .env.example to .env and set it)}
+
+    # ------------------------------------------------------------------
+    # 可选：给容器加内存上限
+    # ------------------------------------------------------------------
+    # 好处：OOM 时只杀本容器，不再「连带杀死」宿主机上的其它服务。
+    # 代价：容器会更早被杀（重启更频繁）；且 cgroup 的 memory.max 同时涵盖
+    #       可回收的 page cache（模型 mmap），设太小会拖慢加载与 prefill。
+    #
+    # 参考量级：宿主 15.5 GiB 时，容器 anon 击杀线约 13.6 GiB。
+    #           若要启用，建议从 12g 起试，并观察 page cache 是否被压得过狠。
+    #
+    # mem_limit: 12g
+    # memswap_limit: 16g
+
+    healthcheck:
+      # /health 免鉴权；加载中返回 503
+      test: ["CMD-SHELL", "curl -sf --noproxy '*' http://127.0.0.1:8080/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # 模型加载通常 8~10s；给足首次启动的宽限
+      start_period: 120s

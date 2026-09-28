@@ -3,6 +3,8 @@
 > 这一篇是后面所有排查的基础。**KVMem 的参数名极具误导性**——`-c` 不控制内存、
 > `--kvmem-budget` 不是显存预算。搞反一次，整个排查方向就跑偏了。
 > 以下每条都标注了**信息来源**（源码注释 / 仓库 README / 实测验证）。
+>
+> 📖 本篇讲「为什么」，**完整参数清单与推荐值见 [07-parameters.md](07-parameters.md)**。
 
 ---
 
@@ -86,7 +88,8 @@ llama-kvmem-server -m /models/model.gguf \
 | **真实含义** | **检索可以留在 GPU 上的历史 token 数** = **有效注意力窗口** |
 | 源码注释 | `select_budget = 131072 // --kvmem-budget (semantic window tokens)` |
 | 仓库 README | *"How many historical tokens retrieval may keep on GPU"* |
-| 默认值 | 131072 |
+| 默认值 | **131072** |
+| 特殊值 | `0` = 等于 `n_ctx`（不做限制） |
 
 **后果**：本机设为 `24576` 时，意味着**检索只会把 2.4 万历史 token 放进注意力窗口**。
 `-c 131072` 只是「客户端可以发 12.8 万长度的历史」，**模型实际"看得到"的仍然只有 2.4 万**。
@@ -96,16 +99,25 @@ llama-kvmem-server -m /models/model.gguf \
 **代价曲线**：budget 越大 → 每步检索要搬运更多块 → **prefill 变慢**。
 官方基准里「首遍 436.7 t/s → 有效 243.2 t/s」的落差就是这个税。
 
-### `--kvmem-gen-reserve` = 留给新生成 token 的 GPU 槽位
+### `--kvmem-gen-reserve` = decode slack（留给新生成 token 的槽位）
 
-单轮生成**不能超过**这个值。默认 16384。
+单轮生成**不能超过**这个值。
+
+| 项 | 值 |
+|---|---|
+| 默认 | **256** |
+| 本机现役 | **16384**（默认值的 **64 倍**） |
+
+> ⚠️ **常见误解**：以为默认是 16384。**默认只有 256** ——
+> 16384 是本机特意调大的，代价是占掉 GPU KV 池的一大块。
+> 官方 `--help` 的原文是 `decode slack (default 256)`。
 
 > 仓库 README：*"GPU KV size is `budget + gen_reserve`"* —— 这是**显存**侧的账，
 > 和宿主侧 KV 池是两回事。
 
 ### `--kv-dtype` = KV 缓存精度（**真正的内存杠杆**）
 
-可选：`f16 | f32 | q8_0 | q5_0 | q4_0`。
+可选：`f16 | f32 | q8_0 | q5_0 | q4_0`（**默认 `q8_0`**）。
 
 - 官方 IQ3 配方用 `q8_0`，IQ4 配方用 `q5_0`。
 - 混合档 `-ctk q8_0 -ctv q4_0` 是唯一被验证过的混合组合（见下节 V100 硬坑）。
@@ -115,9 +127,9 @@ llama-kvmem-server -m /models/model.gguf \
 
 | 参数 | 说明 |
 |---|---|
-| `--spec-type draft-mtp` | 启用 MTP 投机解码 |
-| `--spec-draft-n-max 2` | draft 最大 token 数 |
-| `--kvmem-mtp-state replay` | MTP 状态的 KVMem 处理方式 |
+| `--spec-type draft-mtp` | 启用 MTP 投机解码（默认 `none`） |
+| `--spec-draft-n-max 2` | draft 最大 token 数（默认 **3**，本机设 2） |
+| `--kvmem-mtp-state replay` | MTP 状态的 KVMem 处理方式（默认 `replay`） |
 
 > ⚠ **在 V100 上 MTP 是负收益**（缺 INT8 张量核，见 06 篇），本机实测已确认关闭更好。
 > 这里保留 MTP 参数是服务端的既有配置，不代表它在这个硬件上有收益。
@@ -215,10 +227,10 @@ llama-kvmem-server -m /models/model.gguf \
 ## 6. 一句话小结
 
 ```
--c              → 逻辑工作区（客户端能发多长）     便宜，别拿来治 OOM
---kvmem-budget  → 有效注意力窗口（模型能看到多少） 调大 = 变慢，不是变快
---kvmem-gen-reserve → 单轮生成上限
---kv-dtype      → 每 token 宿主成本（真正的杠杆）  q8_0 34K → q5_0 22K
+-c              → 逻辑工作区（客户端能发多长）     默认 2048；便宜，别拿来治 OOM
+--kvmem-budget  → 有效注意力窗口（模型能看到多少） 默认 131072；调大 = 变慢，不是变快
+--kvmem-gen-reserve → decode slack                 默认 256（本机设 16384）
+--kv-dtype      → 每 token 宿主成本（真正的杠杆）  默认 q8_0；34K → q5_0 22K
 ```
 
 **宿主内存 ≈ 基线 + 实际 token 数 × kv-dtype 每 token 成本**

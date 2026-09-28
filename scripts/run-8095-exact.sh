@@ -30,6 +30,10 @@ KVREPO="${KVREPO:-/home/$USER/kvmem-llama.cpp}"
 MODEL="${MODEL:-/llama/models/Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp.gguf}"
 API_KEY="${API_KEY:-changeme}"
 KVDTYPE="${KVDTYPE:-q5_0}"
+
+if [ "$API_KEY" = "changeme" ]; then
+  echo "[warn] API_KEY 仍是占位符 changeme —— 对外提供服务前请更换：export API_KEY=<你的密钥>" >&2
+fi
 PORT="${PORT:-8095}"
 NAME="${NAME:-kvmem-test}"
 IMAGE="${IMAGE:-nvidia/cuda:12.8.1-devel-ubuntu24.04}"
