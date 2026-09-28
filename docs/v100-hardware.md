@@ -126,7 +126,7 @@ command: "--chat-template-file /models/chat-template.jinja"
 
 ## 4. 8095 —— KVMem（本仓库主角）
 
-详见 [01](01-architecture.md) / [02](02-incident-report.md) / [03](03-tuning-log.md) / [04](04-benchmarks.md)。
+详见 [FINDINGS.md](../FINDINGS.md) 与 [benchmarks.md](benchmarks.md)。
 
 | 项 | 值 |
 |---|---|

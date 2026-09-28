@@ -12,7 +12,7 @@
     - 各精度（f16 / q8_0 / q5_0 / q4_0）下的每 token 成本
     - 常见上下文长度（64K / 96K / 128K）下的 KV 总量
 
-推导依据（本仓库 01-architecture.md）:
+推导依据（见本仓库 FINDINGS.md 的 A5 节）:
     每 token 元素数 = n_head_kv × (key_length + value_length) × 全注意力层数
     f16   = 2 B/元素
     q8_0  = 1.0625 B/元素

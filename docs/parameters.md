@@ -165,7 +165,7 @@ docker logs kvmem-test 2>&1 | grep -i "prompt processing" | tail -5
 --kvmem-nvme-dir PATH      NVMe directory (default /tmp/kvmem_nvme)
 ```
 
-这两个参数**直接对应 [01 篇](01-architecture.md) 讲的"三层存储"**：
+这两个参数**直接对应分层存储的 CPU / NVMe 层**：
 
 | 层 | 参数 | 默认 | 本机现役 |
 |---|---|---|---|
@@ -185,7 +185,7 @@ docker logs kvmem-test 2>&1 | grep -i "prompt processing" | tail -5
 
 | 参数 | 默认 | 含义 |
 |---|---|---|
-| `--kvmem-block-tokens N` | `128` | 块大小（[01 篇](01-architecture.md) 讲的"128-token 块"就是它） |
+| `--kvmem-block-tokens N` | `128` | 块大小（KVMem 把上下文切成 128-token 的块） |
 | `--kvmem-sink-tokens N` | `0` = 一个块 | **永远保留的前缀**（attention sink）；向下取整，最少一个块 |
 | `--kvmem-recent-tokens N` | `0` | **永远保留的最新后缀**（进 select budget） |
 | `--kvmem-method NAME` | `retrieval` | 选块方法：`recency`（只看新旧）\| `retrieval`（按检索分数） |

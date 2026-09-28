@@ -3,7 +3,7 @@
 > 从一台裸机到跑通长上下文服务，逐步可复制粘贴。
 > 每一步都有**预期输出**与**验证方法**——对不上就停下来查，别往下走。
 >
-> 参数细节见 [07-parameters.md](07-parameters.md)；原理见 [01-architecture.md](01-architecture.md)。
+> 参数细节见 [parameters.md](parameters.md)；关键结论见 [FINDINGS.md](../FINDINGS.md)。
 
 ---
 
@@ -35,7 +35,7 @@
 | NVIDIA 驱动 | 支持 CUDA 12.8 | 580.159.04 |
 
 > ⚠️ **宿主内存是本项目最容易踩的坑**。官方基准机是 32 GiB，本机 15.5 GiB
-> 直接导致了一整天的 OOM 事故（见 [02 篇](02-incident-report.md)）。
+> 直接导致了 OOM 事故（见 [FINDINGS.md](../FINDINGS.md) 的 A6）。
 > **如果你的宿主内存 < 20 GiB，请务必读第 8 节再动手。**
 
 ### 1.2 软件
@@ -359,7 +359,7 @@ cat /sys/fs/cgroup/system.slice/memory.events
 ② --kv-dtype q8_0 → q5_0  ← 每 token 成本 −35% ⭐
 ③ --spec-kv-dtype q8_0    ← 把 MTP 的 f16 KV 降下来
 ④ 降 --kvmem-gen-reserve  ← 本机设的 16384 是默认值 256 的 64 倍
-⑤ --kvmem-cpu-gb 设上限   ← ⚠️ 未实测，见 07 篇 §2.5
+⑤ --kvmem-cpu-gb 设上限   ← ⚠️ 未实测，见 [parameters.md](parameters.md)
 ⑥ 给容器加 --memory 上限   ← 让 OOM 只杀容器，不连带杀宿主其它服务
 ```
 
@@ -408,6 +408,6 @@ cat /sys/fs/cgroup/system.slice/memory.events
 
 ## 下一步
 
-- 参数细节与三档推荐配置 → [07-parameters.md](07-parameters.md)
-- 为什么某些参数会把人带偏 → [05-pitfalls-and-methodology.md](05-pitfalls-and-methodology.md)
-- 内存/速度的完整实测数据 → [04-benchmarks.md](04-benchmarks.md)
+- 参数细节与三档推荐配置 → [parameters.md](parameters.md)
+- 为什么某些参数会把人带偏 → [pitfalls.md](pitfalls.md)
+- 内存/速度的完整实测数据 → [benchmarks.md](benchmarks.md)
