@@ -217,8 +217,9 @@
 # 被动采样（不打扰服务）：轮数 24，间隔 15s
 bash scripts/kvmem-mem-sample.sh "" 24 15
 
-# 单次长 prefill 压测：30 万字符 prompt，anon 上限 10500 MiB 自动中止
-bash scripts/kvmem-cap-probe.sh "" 300000 10500
+# 单次长 prefill 压测：30 万字符 prompt，anon 上限 8000 MiB 自动中止
+# ⚠️ 该脚本会主动把内存推到接近 OOM 线，必须显式确认
+CONFIRM_OOM_RISK=1 bash scripts/kvmem-cap-probe.sh "" 300000 8000
 
 # GGUF 几何与每 token 成本推算
 python3 scripts/gguf_kv_math.py /llama/models/Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp.gguf
