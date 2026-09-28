@@ -58,7 +58,7 @@ docker run --rm --gpus all -v "$KVREPO":/src -w /src \
 ### ② 启动
 
 ```bash
-export API_KEY=changeme        # ⚠️ 务必换掉
+export API_KEY="$(openssl rand -hex 24)"   # ⚠️ 别用 changeme：脚本会直接拒绝启动
 
 bash scripts/run-8095-exact.sh 131072 24576          # 方式 A：脚本（自动留回滚档）
 cd deploy && cp .env.example .env && vi .env && docker compose up -d   # 方式 B：compose
@@ -99,13 +99,29 @@ python3 scripts/gguf_kv_math.py "$MODEL"      # 算这个模型的 KV 每 token 
 
 ---
 
+## 安全基线
+
+本仓库的脚本与 compose 都按下面这套默认值走。**手抄命令时请照做** ——
+它们对应的是四个真实存在的坑，不是洁癖。
+
+| # | 默认值 | 为什么 |
+|---|---|---|
+| 1 | 端口只绑 **`127.0.0.1`**（`-p 127.0.0.1:8095:8080`） | 裸写 `-p 8095:8080` 等于绑 `0.0.0.0`，服务对**整个局域网**开放。而 **`/health` 是免鉴权的**，暴露出去连存活信息都公开。要开局域网得显式设 `BIND_IP=0.0.0.0`（会打警告） |
+| 2 | **拒绝占位密钥** | `run-8095-exact.sh` 在 `API_KEY` 为空或 `changeme` 时**直接退出**（要临时放行得显式 `ALLOW_INSECURE_KEY=1`）；compose 用 `${API_KEY:?}` 硬失败；`.env.example` 的 `API_KEY` 留空 |
+| 3 | **打印容器 Cmd 时遮蔽 `--api-key`** | 密钥是命令行参数，会进 `docker inspect`。脚本校验段已遮蔽，避免泄漏到终端回滚 / CI 日志 / 截图。**更彻底的做法是改用 `--api-key-file`**（密钥不进 `docker inspect`），见 [`docs/parameters.md`](docs/parameters.md) |
+| 4 | 压测脚本需 **`CONFIRM_OOM_RISK=1`** 才跑，中止线默认 **8000 MiB** | `kvmem-cap-probe.sh` 的设计意图就是**把宿主内存推到接近 OOM 击杀线** —— 在共享宿主上跑会**连带杀掉其它服务**（正是 FINDINGS 里那条故障的成因）。宿主 15.5 GiB 时击杀线约 13.6 GiB，8000 留出 ~5.6 GiB 余量 |
+
+> 另外：容器**没有挂载 `docker.sock`**，模型以 `:ro` 只读挂载 —— 这两点请保持不变。
+
+---
+
 ## 目录
 
 ### 核心
 
 | 文档 | 内容 |
 |---|---|
-| [`FINDINGS.md`](FINDINGS.md) | ⭐ **关键发现与结论**：内存模型、排查方法、V100 硬件约束、操作纪律、一页速查 |
+| [`FINDINGS.md`](FINDINGS.md) | ⭐ **关键发现与结论**：内存模型、排查方法、V100 硬件约束、操作纪律、**安全基线**、一页速查 |
 
 ### 参考
 
@@ -121,8 +137,8 @@ python3 scripts/gguf_kv_math.py "$MODEL"      # 算这个模型的 KV 每 token 
 
 | 脚本 | 用途 |
 |---|---|
-| [`scripts/run-8095-exact.sh`](scripts/run-8095-exact.sh) | **精确复刻**容器（按 `docker inspect` 反推，支持 `[context] [budget]`，自动留回滚记录） |
-| [`scripts/kvmem-cap-probe.sh`](scripts/kvmem-cap-probe.sh) | 长上下文容量压测：单次长 prefill + 每 5s 采样，带 anon 上限自动中止 |
+| [`scripts/run-8095-exact.sh`](scripts/run-8095-exact.sh) | **精确复刻**容器（按 `docker inspect` 反推，支持 `[context] [budget]`，自动留回滚记录；默认只绑 `127.0.0.1`、拒绝占位密钥、遮蔽 key 输出） |
+| [`scripts/kvmem-cap-probe.sh`](scripts/kvmem-cap-probe.sh) | 长上下文容量压测：单次长 prefill + 每 5s 采样，带 anon 上限自动中止（☠️ 需 `CONFIRM_OOM_RISK=1`） |
 | [`scripts/kvmem-mem-sample.sh`](scripts/kvmem-mem-sample.sh) | 纯被动采样（不打扰服务）：内存 / 显存 / 上下文长度 |
 | [`scripts/gguf_kv_math.py`](scripts/gguf_kv_math.py) | 解析 GGUF 头，推算 KV **每 token 成本**与各上下文长度下的总量 |
 

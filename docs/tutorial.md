@@ -152,15 +152,16 @@ python3 scripts/gguf_kv_math.py "$MODEL"
 ### 方式 A：`docker run`（照抄即可）
 
 ```bash
-export API_KEY=changeme          # 务必换掉
+export API_KEY="$(openssl rand -hex 24)"   # ⚠️ 别用 changeme，理由见下方
 export KVDTYPE=q5_0              # q8_0 更准但更吃内存；q5_0 是本仓库推荐
 export BUDGET=24576              # 有效注意力窗口（token 数）
+export BIND_IP=127.0.0.1         # 只绑本机；要让局域网访问才改成 0.0.0.0
 
 docker rm -f kvmem-test 2>/dev/null
 
 docker run -d --name kvmem-test \
   --gpus all \
-  -p 8095:8080 \
+  -p "$BIND_IP":8095:8080 \
   --restart unless-stopped \
   -v "$KVREPO":/src \
   -v "$MODEL":/models/model.gguf:ro \
@@ -178,13 +179,24 @@ docker run -d --name kvmem-test \
 > bash scripts/run-8095-exact.sh 131072 24576
 > ```
 
+> ⚠️ **三个安全默认值**（脚本与 compose 都已内置；手抄上面命令时请照做）：
+>
+> 1. **端口绑 `127.0.0.1`，不要裸写 `-p 8095:8080`** —— 不写 host IP 等于绑 `0.0.0.0`，
+>    对**整个局域网**开放。而 `/health` 是**免鉴权**的，暴露出去连存活信息都公开。
+> 2. **别用 `changeme`**。`run-8095-exact.sh` 现在会**直接拒绝启动**，除非显式
+>    `ALLOW_INSECURE_KEY=1`；compose 用 `${API_KEY:?}` 也会硬失败。
+> 3. **`--api-key` 的值会出现在 `docker inspect` 里**（它是命令行参数）。
+>    要彻底避免，改用 **`--api-key-file`**（一行一个 key，空行与 `#` 开头忽略），
+>    把 key 文件以只读方式挂进容器。脚本校验段打印 Cmd 时也已遮蔽该值。
+
 ### 方式 B：`docker compose`
 
 见 [`deploy/docker-compose.yml`](../deploy/docker-compose.yml)：
 
 ```bash
 cd deploy
-export KVREPO=/home/$USER/kvmem-llama.cpp MODEL=/llama/models/xxx.gguf API_KEY=changeme
+cp .env.example .env
+vi .env          # 至少填 API_KEY（留空 compose 会直接报错退出）；BIND_IP 默认 127.0.0.1
 docker compose up -d
 ```
 
@@ -269,9 +281,11 @@ docker logs kvmem-test 2>&1 | grep -i "prompt processing" | tail -3
 ### 7.1 通用 OpenAI 客户端
 
 ```python
+import os
 from openai import OpenAI
 
-client = OpenAI(base_url="http://<HOST_IP>:8095/v1", api_key="changeme")
+client = OpenAI(base_url="http://<HOST_IP>:8095/v1",
+                api_key=os.environ["API_KEY"])   # 你设的 --api-key；别硬编码进源码
 
 resp = client.chat.completions.create(
     model="model.gguf",                      # 默认取 -m 的文件名
@@ -296,7 +310,7 @@ print(resp.choices[0].message.content)
 
 | 路径 | 是否需要 key |
 |---|---|
-| `/health` | ❌ 免鉴权 |
+| `/health` | ❌ 免鉴权 ← **所以别把端口绑到 `0.0.0.0`** |
 | `/slots` | ✅ 要 key |
 | `/v1/*` | ✅ 要 key |
 

@@ -1,24 +1,46 @@
 #!/usr/bin/env bash
 # KVMem 长上下文容量曲线压测：单次长 prefill + 高频内存采样，带 anon 上限自动中止。
 #
+# ☠️ 危险：本脚本的设计意图就是**把宿主内存推到接近 OOM 击杀线**。
+#    - 在共享 / 生产宿主上跑，会**连带杀掉宿主上的其它服务**（OOM 杀进程，不挑对象）。
+#      这正是本项目 FINDINGS 里那条「客户端反复掉线」故障的成因机制。
+#    - 因此必须显式确认后才运行：CONFIRM_OOM_RISK=1
+#    - 中止线 = 第 3 个参数（anon 上限 MiB），默认 8000。
+#      宿主 15.5 GiB 时击杀线约 13.6 GiB，8000 留出 ~5.6 GiB 给宿主其它进程。
+#      **调高这个值 = 主动缩小安全余量**，别为了多测几个 token 把宿主搭进去。
+#
 # ⚠️ 该服务 total_slots=1 —— 压测会「独占服务」，跑之前先确认空闲：
 #      curl -s --noproxy '*' http://127.0.0.1:8095/slots -H "Authorization: Bearer $API_KEY" \
 #        | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["is_processing"])'
 #
-# 用法: bash kvmem-cap-probe.sh [sudo密码] <prompt字符数> [anon上限MiB]
-#   例: bash kvmem-cap-probe.sh "" 300000 10500
+# 用法: CONFIRM_OOM_RISK=1 bash kvmem-cap-probe.sh [sudo密码] <prompt字符数> [anon上限MiB]
+#   例: CONFIRM_OOM_RISK=1 bash kvmem-cap-probe.sh "" 300000 8000
 #
-# 环境变量: NAME（默认 kvmem-test）、PORT（默认 8095）、API_KEY（默认 changeme）
+# 环境变量: NAME（默认 kvmem-test）、PORT（默认 8095）、API_KEY、CONFIRM_OOM_RISK
 #
 # 输出: CSV 表头 elapsed_s,anon_MiB,file_MiB,shmem_MiB,avail_MiB,swap_MiB,gpu_MiB
 #       结尾打印 peak_anon_MiB / wall_s / abort，以及响应的 usage 与 timings。
 
 PW="${1:-}"
 CHARS="${2:?需要 prompt 字符数，例如 300000}"
-LIMIT="${3:-10500}"
+LIMIT="${3:-8000}"
 NAME="${NAME:-kvmem-test}"
 PORT="${PORT:-8095}"
 API_KEY="${API_KEY:-changeme}"
+
+# ---- 安全门：OOM 风险必须显式确认 ----
+if [ "${CONFIRM_OOM_RISK:-0}" != "1" ]; then
+  cat >&2 <<'EOF'
+[error] 本脚本会主动把宿主内存推到接近 OOM 击杀线，可能连带杀掉宿主上的其它服务。
+        确认当前宿主上「没有别的服务会被波及」之后，加 CONFIRM_OOM_RISK=1 再跑：
+
+    CONFIRM_OOM_RISK=1 bash kvmem-cap-probe.sh "" 300000 8000
+
+        中止线（第 3 个参数）默认 8000 MiB；宿主 15.5 GiB 时击杀线约 13.6 GiB。
+        调高中止线等于主动缩小安全余量。
+EOF
+  exit 1
+fi
 
 if [ -n "$PW" ]; then
   SUDO() { printf '%s\n' "$PW" | sudo -S -p '' "$@"; }

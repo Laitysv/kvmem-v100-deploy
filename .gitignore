@@ -5,6 +5,9 @@
 .env
 .env.*
 !.env.example
+# 若改用 --api-key-file，密钥会落盘，别让它进仓库
+.kvmem-api-key
+*kvmem-api-key*
 
 # 运行期产物
 *.bak

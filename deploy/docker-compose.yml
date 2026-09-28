@@ -32,7 +32,11 @@ services:
     gpus: all
 
     ports:
-      - "${HOST_PORT:-8095}:8080"
+      # ⚠️ 默认只绑回环 127.0.0.1 —— 服务不对局域网开放。
+      #    要让同网段/其它机器访问，把 BIND_IP 改成 0.0.0.0：
+      #      BIND_IP=0.0.0.0 docker compose up -d
+      #    但请记住 /health 是**免鉴权**的，暴露到网络等于把存活信息一起公开。
+      - "${BIND_IP:-127.0.0.1}:${HOST_PORT:-8095}:8080"
 
     volumes:
       # fork 源码目录（容器内 /src，二进制在 /src/build/bin/llama-kvmem-server）

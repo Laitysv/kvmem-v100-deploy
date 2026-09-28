@@ -239,6 +239,16 @@ docker logs kvmem-test 2>&1 | grep -i "prompt processing" | tail -5
 | `--timeout, -to N` | `1800` | HTTP 读写超时（秒） |
 | `--threads-http N` | 自动 | HTTP worker 线程数 |
 
+> ⚠️ **`--api-key` 会把密钥写进容器的命令行** —— 任何能跑 `docker inspect` 的人都能读到，
+> 也极易泄漏到日志 / CI 输出 / 截图。要避免就用 **`--api-key-file`**：
+> 把 key 放一个文件（一行一个，空行与 `#` 开头忽略），以**只读**方式挂进容器，
+> 命令行里只剩路径。本仓库的 `run-8095-exact.sh` 已在打印 Cmd 时遮蔽该值。
+>
+> ⚠️ **`--host 0.0.0.0` 是容器内的监听地址，和宿主侧 `-p` 绑定是两件事**：
+> 容器内必须是 `0.0.0.0` 才能被转发进来，但**宿主侧应该绑 `127.0.0.1`**
+> （`-p 127.0.0.1:8095:8080`）。裸写 `-p 8095:8080` 等于绑 `0.0.0.0`，
+> 服务对**整个局域网**开放 —— 而 `/health` 是免鉴权的。
+
 ### 4.2 上下文与批处理
 
 | 参数 | 默认 | 说明 |
@@ -323,7 +333,7 @@ docker logs kvmem-test 2>&1 | grep -i "prompt processing" | tail -5
 
 ```bash
 docker rm -f kvmem-test && docker run -d --name kvmem-test \
-  --gpus all -p 8095:8080 --restart unless-stopped \
+  --gpus all -p 127.0.0.1:8095:8080 --restart unless-stopped \
   -v /home/$USER/kvmem-llama.cpp:/src \
   -v /llama/models/Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp.gguf:/models/model.gguf:ro \
   nvidia/cuda:12.8.1-devel-ubuntu24.04 \
@@ -337,6 +347,7 @@ docker rm -f kvmem-test && docker run -d --name kvmem-test \
 | 参数 | 值 | 为什么这么设 | 相对默认 |
 |---|---|---|---|
 | `--host 0.0.0.0` | — | 容器内必须，否则外部访问不到 | 默认 `127.0.0.1` |
+| `-p 127.0.0.1:8095:8080` | — | ⚠️ **只绑本机**。`/health` 免鉴权，绑 `0.0.0.0` 等于把服务暴露给整个局域网 | 原先裸写 `-p 8095:8080`（= 绑 `0.0.0.0`） |
 | `-c 131072` | 128K | 允许客户端发 12.8 万长度历史；**成本极低**（空载仅 245 MiB） | 默认 2048 |
 | `-n 16384` | — | 默认生成上限 | 默认 `-1` |
 | `--kvmem-budget 24576` | 2.4 万 | ⚠️ **有效窗口只有 2.4 万**，远小于 `-c` | 默认 131072 |
