@@ -25,7 +25,7 @@
 
 ### A2. ⭐️ 真正的杠杆是 `--kv-dtype`
 
-每 token 宿主成本（本模型几何：16 个全注意力层 × 4 kv_head × 512）：
+每 token 宿主成本（本模型几何：**16** 个全注意力层 × 4 kv_head × 512 —— 65 层里只有这 16 层有 KV，见 [docs/v100-hardware.md](docs/v100-hardware.md)）：
 
 | dtype | 每 token | 说明 |
 |---|---:|---|

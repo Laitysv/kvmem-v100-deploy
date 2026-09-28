@@ -1,4 +1,4 @@
-# 06 · V100 部署全景：一张卡上的三个服务
+# V100 部署全景：一张卡上的三个服务
 
 > 本次事故的机器上并非只跑 KVMem。理解**同卡多服务的共存与互斥关系**，
 > 才能解释「为什么内存会紧张」和「为什么改配置要先停别的服务」。
@@ -43,8 +43,31 @@
 | 策略 | `restart: unless-stopped` |
 | 清单 | `/vol1/1000/<USER>/qwen27b-deploy/docker-compose.yml` |
 | 模型 | `Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp.gguf`（IQ3_S，866 张量，11.29 GiB） |
+| **架构** | **混合架构**：全注意力层只有 **16** 层，其余为 Gated DeltaNet 循环层 |
 | 参数 | `-c 102400 -ctk q8_0 -ctv q8_0 -fa on -fitt 256 -t 20 -b 2048 -ub 512 -np 1` |
 | **速度基线** | **33.8–34.0 t/s**（2026-09-26 实测稳态） |
+
+### 模型架构：为什么 KV 只按 16 层算
+
+（数字直接来自 `scripts/gguf_kv_math.py` 对 GGUF 头的解析）
+
+| 项 | 值 |
+|---|---|
+| GGUF `block_count` | **65** |
+| 全注意力层 | **16** —— `full_attention_interval = 4` → 层号 3, 7, 11, …, 63 |
+| 循环层 | **48** —— Gated DeltaNet（线性注意力，状态 **O(1)**，**与上下文长度无关**） |
+| 其余 | **1 层 MTP / nextn 预测头**（模型名里的 `-mtp`） |
+| 几何 | `n_head = 40`，`n_head_kv = 4`，`key_length = value_length = 256`，`n_embd = 5120` |
+
+> ⭐ **只有那 16 层有 KV 缓存。** 每 token 元素数
+> = `16 层 × 4 kv_head × (256 + 256)` = **32768 元素/token**。
+>
+> ⚠️ **别按「65 层全有 KV」估**——那样会**高估 4 倍**，容量规划直接错。
+> 这 48 层 GDN 也是 KVMem 的块稀疏方案只作用在 16 层上的原因。
+>
+> 这个数**不要手算**：脚本会读 GGUF 里的 `full_attention_interval`
+> 自动取 16（`n_attn = nl // fai`）。验证输出见
+> [tutorial.md 第 4 节](tutorial.md)。
 
 ### 值得记住的行为特征
 
