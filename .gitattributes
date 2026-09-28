@@ -1,0 +1,12 @@
+# 统一按 LF 存储，避免 Windows 上 clone 后 shell 脚本无法执行
+* text=auto eol=lf
+
+*.sh  text eol=lf
+*.py  text eol=lf
+*.md  text eol=lf
+*.json text eol=lf
+
+# 二进制
+*.gguf binary
+*.png binary
+*.jpg binary
